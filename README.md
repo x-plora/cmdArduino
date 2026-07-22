@@ -14,6 +14,11 @@ This fork is maintained by Kirill X-plora Chugreev
 (`<the.xplora@gmail.com>`). It adds silent-mode output control while retaining
 the original command parser behavior.
 
+## Layout
+
+The public header and implementation are in `src/`, which is the standard
+Arduino and PlatformIO library layout. Examples remain in `examples/`.
+
 ## Requirements
 
 - Arduino-compatible AVR or megaAVR board.
