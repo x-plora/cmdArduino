@@ -6,8 +6,8 @@
  * @copyright Copyright (c) 2026 Kirill X-plora Chugreev.
  * @license BSD-3-Clause
  * @note Modified 2026-07-23: added initialization-time CLI messages, CRLF
- *       input handling, a fixed-size interactive command history, and empty
- *       command handling.
+ *       input handling, a fixed-size interactive command history, line
+ *       editing, ANSI terminal control, and empty command handling.
  * @note Modified 2026-07-22: added silent-mode output control.
  *
  * Originally written by Christopher Wang aka Akiba.
@@ -39,14 +39,17 @@
  */
 #include <cmdArduino.h>
 
-// command line message buffer and pointer
+// command line message buffer and edit state
 static uint8_t msg[MAX_MSG_SIZE];
-static uint8_t *msg_ptr;
+static uint8_t msg_length;
+static uint8_t msg_cursor;
 static char cmd_history[CMD_HISTORY_DEPTH][MAX_MSG_SIZE];
 static uint8_t cmd_history_count;
 static uint8_t cmd_history_next;
 static uint8_t cmd_history_pos;
 static uint8_t cmd_escape_state;
+static uint8_t cmd_escape_param;
+static uint8_t cmd_rendered_length;
 static char cmd_draft[MAX_MSG_SIZE];
 
 // linked list for command table
@@ -57,14 +60,24 @@ Cmd cmd;
 #define CMD_ESCAPE_NONE 0
 #define CMD_ESCAPE_START 1
 #define CMD_ESCAPE_CSI 2
+#define CMD_ESCAPE_SS3 3
+#define CMD_ESCAPE_CSI_PARAM 4
+
+#define CMD_ANSI_PROBE_NONE 0
+#define CMD_ANSI_PROBE_ESC 1
+#define CMD_ANSI_PROBE_CSI 2
+#define CMD_ANSI_PROBE_DEVICE_ATTRIBUTES 3
+#define CMD_ANSI_PROBE_TIMEOUT_MS 200UL
 
 /**************************************************************************/
 /*!
     constructor
 */
 /**************************************************************************/
-Cmd::Cmd() : _promptEnabled(true), _bannerPending(true), _banner(NULL),
-             _prompt(NULL), _unrecognized(NULL)
+Cmd::Cmd() : _promptEnabled(true), _bannerPending(true), _ansiEnabled(false),
+             _ansiManual(false), _ansiDetecting(false),
+             _ansiProbeState(CMD_ANSI_PROBE_NONE), _ansiProbeDeadline(0),
+             _banner(NULL), _prompt(NULL), _unrecognized(NULL)
 {
 
 }
@@ -82,12 +95,117 @@ void Cmd::display()
     }
 
     _ser->println();
+    cmd_rendered_length = 0;
     if (_bannerPending)
     {
         _ser->println(_banner);
         _bannerPending = false;
+        startAnsiDetection();
     }
     _ser->print(_prompt);
+}
+
+void Cmd::startAnsiDetection()
+{
+    if (_ansiManual)
+    {
+        return;
+    }
+
+    _ansiEnabled = false;
+    _ansiDetecting = true;
+    _ansiProbeState = CMD_ANSI_PROBE_NONE;
+    _ansiProbeDeadline = millis() + CMD_ANSI_PROBE_TIMEOUT_MS;
+    _ser->print(F("\033[c"));
+}
+
+bool Cmd::consumeAnsiResponse(char c)
+{
+    if (!_ansiDetecting)
+    {
+        return false;
+    }
+
+    if (_ansiProbeState == CMD_ANSI_PROBE_NONE)
+    {
+        if (c == 0x1B)
+        {
+            _ansiProbeState = CMD_ANSI_PROBE_ESC;
+            return true;
+        }
+        return false;
+    }
+
+    if (_ansiProbeState == CMD_ANSI_PROBE_ESC)
+    {
+        if (c == '[')
+        {
+            _ansiProbeState = CMD_ANSI_PROBE_CSI;
+            return true;
+        }
+        _ansiDetecting = false;
+        _ansiProbeState = CMD_ANSI_PROBE_NONE;
+        return false;
+    }
+
+    if (_ansiProbeState == CMD_ANSI_PROBE_CSI)
+    {
+        if (c == '?')
+        {
+            _ansiProbeState = CMD_ANSI_PROBE_DEVICE_ATTRIBUTES;
+            return true;
+        }
+
+        _ansiDetecting = false;
+        _ansiProbeState = CMD_ANSI_PROBE_NONE;
+        if (c == 'A')
+        {
+            historyUp();
+        }
+        else if (c == 'B')
+        {
+            historyDown();
+        }
+        else if (c == 'C')
+        {
+            cursorRight();
+        }
+        else if (c == 'D')
+        {
+            cursorLeft();
+        }
+        else if (c == 'H')
+        {
+            cursorHome();
+        }
+        else if (c == 'F')
+        {
+            cursorEnd();
+        }
+        else if (c >= '0' && c <= '9')
+        {
+            cmd_escape_param = c - '0';
+            cmd_escape_state = CMD_ESCAPE_CSI_PARAM;
+        }
+        return true;
+    }
+
+    if (c == 'c')
+    {
+        _ansiEnabled = true;
+        _ansiDetecting = false;
+        _ansiProbeState = CMD_ANSI_PROBE_NONE;
+        return true;
+    }
+
+    if ((c >= '0' && c <= '9') || c == ';')
+    {
+        return true;
+    }
+
+    _ansiDetecting = false;
+    _ansiProbeState = CMD_ANSI_PROBE_NONE;
+    return false;
 }
 
 void Cmd::addHistory()
@@ -108,24 +226,117 @@ void Cmd::addHistory()
 
 void Cmd::replaceLine(const char *line)
 {
-    uint8_t old_length = msg_ptr - msg;
-    uint8_t new_length = strlen(line);
-
-    memcpy(msg, line, new_length);
-    msg[new_length] = '\0';
-    msg_ptr = msg + new_length;
-
-    _ser->print('\r');
-    _ser->print(_prompt);
-    _ser->print((char *)msg);
-    while (new_length < old_length)
+    msg_length = 0;
+    while (msg_length < MAX_MSG_SIZE - 1 && line[msg_length] != '\0')
     {
-        _ser->print(' ');
-        new_length++;
+        msg[msg_length] = line[msg_length];
+        msg_length++;
     }
+    msg[msg_length] = '\0';
+    msg_cursor = msg_length;
+    redrawLine();
+}
+
+void Cmd::redrawLine()
+{
+    if (!_promptEnabled)
+    {
+        return;
+    }
+
     _ser->print('\r');
     _ser->print(_prompt);
     _ser->print((char *)msg);
+    if (_ansiEnabled)
+    {
+        _ser->print(F("\033[K"));
+
+        uint8_t tail_length = msg_length - msg_cursor;
+        if (tail_length > 0)
+        {
+            _ser->print(F("\033["));
+            _ser->print(tail_length);
+            _ser->print('D');
+        }
+    }
+    else
+    {
+        while (cmd_rendered_length > msg_length)
+        {
+            _ser->print(' ');
+            cmd_rendered_length--;
+        }
+        _ser->print('\r');
+        _ser->print(_prompt);
+        for (uint8_t i = 0; i < msg_cursor; i++)
+        {
+            _ser->print((char)msg[i]);
+        }
+    }
+    cmd_rendered_length = msg_length;
+}
+
+void Cmd::leaveHistory()
+{
+    if (cmd_history_pos == cmd_history_count)
+    {
+        return;
+    }
+
+    memcpy(cmd_draft, msg, msg_length);
+    cmd_draft[msg_length] = '\0';
+    cmd_history_pos = cmd_history_count;
+}
+
+void Cmd::cursorLeft()
+{
+    if (_promptEnabled && msg_cursor > 0)
+    {
+        msg_cursor--;
+        redrawLine();
+    }
+}
+
+void Cmd::cursorRight()
+{
+    if (_promptEnabled && msg_cursor < msg_length)
+    {
+        msg_cursor++;
+        redrawLine();
+    }
+}
+
+void Cmd::cursorHome()
+{
+    if (_promptEnabled && msg_cursor > 0)
+    {
+        msg_cursor = 0;
+        redrawLine();
+    }
+}
+
+void Cmd::cursorEnd()
+{
+    if (_promptEnabled && msg_cursor < msg_length)
+    {
+        msg_cursor = msg_length;
+        redrawLine();
+    }
+}
+
+void Cmd::deleteCharacter()
+{
+    if (!_promptEnabled || msg_cursor >= msg_length)
+    {
+        return;
+    }
+
+    leaveHistory();
+    memmove(msg + msg_cursor, msg + msg_cursor + 1,
+            msg_length - msg_cursor - 1);
+    msg_length--;
+    msg[msg_length] = '\0';
+    redrawLine();
 }
 
 void Cmd::historyUp()
@@ -137,8 +348,8 @@ void Cmd::historyUp()
 
     if (cmd_history_pos == cmd_history_count)
     {
-        memcpy(cmd_draft, msg, msg_ptr - msg);
-        cmd_draft[msg_ptr - msg] = '\0';
+        memcpy(cmd_draft, msg, msg_length);
+        cmd_draft[msg_length] = '\0';
         cmd_history_pos--;
     }
     else if (cmd_history_pos > 0)
@@ -204,6 +415,14 @@ void Cmd::parse(char *cmd)
         return;
     }
 
+    if (argc == 3 && !strcmp(argv[0], "__cmd") &&
+        !strcmp(argv[1], "ansi") && !strcmp(argv[2], "off"))
+    {
+        setAnsiMode(false);
+        display();
+        return;
+    }
+
     // parse the command table for valid command. used argv[0] which is the
     // actual command name typed in at the prompt
     for (cmd_entry = cmd_tbl; cmd_entry != NULL; cmd_entry = cmd_entry->next)
@@ -236,13 +455,24 @@ void Cmd::handler()
 {
     char c = _ser->read();
 
+    if (consumeAnsiResponse(c))
+    {
+        return;
+    }
+
     if (cmd_escape_state == CMD_ESCAPE_START)
     {
-        cmd_escape_state = c == '[' ? CMD_ESCAPE_CSI : CMD_ESCAPE_NONE;
-        if (cmd_escape_state != CMD_ESCAPE_NONE)
+        if (c == '[')
         {
+            cmd_escape_state = CMD_ESCAPE_CSI;
             return;
         }
+        if (c == 'O')
+        {
+            cmd_escape_state = CMD_ESCAPE_SS3;
+            return;
+        }
+        cmd_escape_state = CMD_ESCAPE_NONE;
     }
     else if (cmd_escape_state == CMD_ESCAPE_CSI)
     {
@@ -254,6 +484,70 @@ void Cmd::handler()
         else if (c == 'B')
         {
             historyDown();
+        }
+        else if (c == 'C')
+        {
+            cursorRight();
+        }
+        else if (c == 'D')
+        {
+            cursorLeft();
+        }
+        else if (c == 'H')
+        {
+            cursorHome();
+        }
+        else if (c == 'F')
+        {
+            cursorEnd();
+        }
+        else if (c >= '0' && c <= '9')
+        {
+            cmd_escape_param = c - '0';
+            cmd_escape_state = CMD_ESCAPE_CSI_PARAM;
+            return;
+        }
+        return;
+    }
+    else if (cmd_escape_state == CMD_ESCAPE_SS3)
+    {
+        cmd_escape_state = CMD_ESCAPE_NONE;
+        if (c == 'H')
+        {
+            cursorHome();
+        }
+        else if (c == 'F')
+        {
+            cursorEnd();
+        }
+        return;
+    }
+    else if (cmd_escape_state == CMD_ESCAPE_CSI_PARAM)
+    {
+        if (c >= '0' && c <= '9')
+        {
+            if (cmd_escape_param < 25)
+            {
+                cmd_escape_param = cmd_escape_param * 10 + c - '0';
+            }
+            return;
+        }
+
+        cmd_escape_state = CMD_ESCAPE_NONE;
+        if (c == '~')
+        {
+            if (cmd_escape_param == 1 || cmd_escape_param == 7)
+            {
+                cursorHome();
+            }
+            else if (cmd_escape_param == 4 || cmd_escape_param == 8)
+            {
+                cursorEnd();
+            }
+            else if (cmd_escape_param == 3)
+            {
+                deleteCharacter();
+            }
         }
         return;
     }
@@ -270,36 +564,72 @@ void Cmd::handler()
         break;
 
     case '\r':
-        // terminate the msg and reset the msg ptr. then send
-        // it to the handler for processing.
-        *msg_ptr = '\0';
+        // terminate the current message and send it to the command parser.
+        msg[msg_length] = '\0';
         addHistory();
         _ser->print("\r\n");
         parse((char *)msg);
-        msg_ptr = msg;
+        msg_length = 0;
+        msg_cursor = 0;
         break;
     
     case '\b':
+    case 0x7F:
         // backspace 
-        cmd_history_pos = cmd_history_count;
-        _ser->print(c);
-        if (msg_ptr > msg)
+        if (_promptEnabled)
         {
-            msg_ptr--;
+            if (msg_cursor > 0)
+            {
+                leaveHistory();
+                memmove(msg + msg_cursor - 1, msg + msg_cursor,
+                        msg_length - msg_cursor);
+                msg_length--;
+                msg_cursor--;
+                msg[msg_length] = '\0';
+                redrawLine();
+            }
+        }
+        else
+        {
+            _ser->print(c);
+            if (msg_length > 0)
+            {
+                msg_length--;
+                msg_cursor = msg_length;
+            }
         }
         break;
     
     default:
         // normal character entered. add it to the buffer
-        cmd_history_pos = cmd_history_count;
-        _ser->print(c);
-        *msg_ptr++ = c;
-
-        // msg too long, clear command and display warning 
-        if ((msg_ptr - msg) == (MAX_MSG_SIZE-1))
+        if (msg_length >= MAX_MSG_SIZE - 1)
         {
             _ser->println("Command too long. Pleaes reduce command size.");
-            msg_ptr = msg;
+            msg_length = 0;
+            msg_cursor = 0;
+            msg[0] = '\0';
+            display();
+            break;
+        }
+
+        if (_promptEnabled)
+        {
+            leaveHistory();
+            memmove(msg + msg_cursor + 1, msg + msg_cursor,
+                    msg_length - msg_cursor);
+            msg[msg_cursor] = c;
+            msg_length++;
+            msg_cursor++;
+            msg[msg_length] = '\0';
+            redrawLine();
+        }
+        else
+        {
+            _ser->print(c);
+            msg[msg_length] = c;
+            msg_length++;
+            msg_cursor = msg_length;
+            msg[msg_length] = '\0';
         }
         break;
     }
@@ -313,6 +643,13 @@ void Cmd::handler()
 /**************************************************************************/
 void Cmd::poll()
 {
+    if (_ansiDetecting &&
+        (long)(millis() - _ansiProbeDeadline) >= 0)
+    {
+        _ansiDetecting = false;
+        _ansiProbeState = CMD_ANSI_PROBE_NONE;
+    }
+
     while (_ser->available())
     {
         handler();
@@ -330,8 +667,10 @@ void Cmd::begin(uint32_t speed, HardwareSerial *ser,
                 const __FlashStringHelper *prompt,
                 const __FlashStringHelper *unrecognized)
 {
-    // init the msg ptr
-    msg_ptr = msg;
+    // init the message buffer
+    msg_length = 0;
+    msg_cursor = 0;
+    msg[0] = '\0';
 
     // init the command table
     cmd_tbl_list = NULL;
@@ -339,6 +678,8 @@ void Cmd::begin(uint32_t speed, HardwareSerial *ser,
     cmd_history_next = 0;
     cmd_history_pos = 0;
     cmd_escape_state = CMD_ESCAPE_NONE;
+    cmd_escape_param = 0;
+    cmd_rendered_length = 0;
 
     // load in the serial pointer if it's passed in
     if (ser == NULL)
@@ -355,6 +696,12 @@ void Cmd::begin(uint32_t speed, HardwareSerial *ser,
     _unrecognized = unrecognized ? unrecognized :
         F("CMD: Command not recognized.");
     _bannerPending = true;
+    if (!_ansiManual)
+    {
+        _ansiEnabled = false;
+    }
+    _ansiDetecting = false;
+    _ansiProbeState = CMD_ANSI_PROBE_NONE;
 
     // set the serial speed
     _ser->begin(speed);
@@ -390,6 +737,14 @@ void Cmd::add(const char *name, void (*func)(int argc, char **argv))
 void Cmd::setSilentMode(bool enabled)
 {
     _promptEnabled = !enabled;
+}
+
+void Cmd::setAnsiMode(bool enabled)
+{
+    _ansiEnabled = enabled;
+    _ansiManual = true;
+    _ansiDetecting = false;
+    _ansiProbeState = CMD_ANSI_PROBE_NONE;
 }
 
 /**************************************************************************/
