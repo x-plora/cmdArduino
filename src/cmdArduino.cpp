@@ -70,6 +70,30 @@ Cmd cmd;
 #define CMD_ANSI_PROBE_CSI 2
 #define CMD_ANSI_PROBE_DEVICE_ATTRIBUTES 3
 
+static bool utf8_two_byte_lead(uint8_t byte) {
+    return byte >= 0xC2 && byte <= 0xDF;
+}
+
+static bool utf8_continuation(uint8_t byte) {
+    return (byte & 0xC0) == 0x80;
+}
+
+static uint8_t utf8_character_length_at(uint8_t index) {
+    if (index + 1 < msg_length && utf8_two_byte_lead(msg[index]) &&
+        utf8_continuation(msg[index + 1])) {
+        return 2;
+    }
+    return 1;
+}
+
+static uint8_t utf8_previous_character_start(uint8_t index) {
+    if (index >= 2 && utf8_two_byte_lead(msg[index - 2]) &&
+        utf8_continuation(msg[index - 1])) {
+        return index - 2;
+    }
+    return index - 1;
+}
+
 /**************************************************************************/
 /*!
     constructor
@@ -290,7 +314,7 @@ void Cmd::cursorLeft()
 {
     if (_promptEnabled && msg_cursor > 0)
     {
-        msg_cursor--;
+        msg_cursor = utf8_previous_character_start(msg_cursor);
         redrawLine();
     }
 }
@@ -299,7 +323,7 @@ void Cmd::cursorRight()
 {
     if (_promptEnabled && msg_cursor < msg_length)
     {
-        msg_cursor++;
+        msg_cursor += utf8_character_length_at(msg_cursor);
         redrawLine();
     }
 }
@@ -330,9 +354,10 @@ void Cmd::deleteCharacter()
     }
 
     leaveHistory();
-    memmove(msg + msg_cursor, msg + msg_cursor + 1,
-            msg_length - msg_cursor - 1);
-    msg_length--;
+    uint8_t length = utf8_character_length_at(msg_cursor);
+    memmove(msg + msg_cursor, msg + msg_cursor + length,
+            msg_length - msg_cursor - length);
+    msg_length -= length;
     msg[msg_length] = '\0';
     redrawLine();
 }
@@ -584,10 +609,11 @@ void Cmd::handler()
             if (msg_cursor > 0)
             {
                 leaveHistory();
-                memmove(msg + msg_cursor - 1, msg + msg_cursor,
+                uint8_t start = utf8_previous_character_start(msg_cursor);
+                memmove(msg + start, msg + msg_cursor,
                         msg_length - msg_cursor);
-                msg_length--;
-                msg_cursor--;
+                msg_length -= msg_cursor - start;
+                msg_cursor = start;
                 msg[msg_length] = '\0';
                 redrawLine();
             }
@@ -600,8 +626,10 @@ void Cmd::handler()
             }
             if (msg_length > 0)
             {
-                msg_length--;
+                uint8_t start = utf8_previous_character_start(msg_length);
+                msg_length = start;
                 msg_cursor = msg_length;
+                msg[msg_length] = '\0';
             }
         }
         break;

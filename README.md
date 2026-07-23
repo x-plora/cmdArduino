@@ -110,6 +110,8 @@ is disabled, so machine-readable protocol input is not retained.
 In interactive mode, use Left and Right to move the cursor, Home and End to
 move to the beginning or end of the command, Backspace to erase the character
 to the left of the cursor, and Delete to erase the character at the cursor.
+Two-byte UTF-8 characters are kept intact by cursor movement, Backspace, and
+Delete.
 The CLI sends an ANSI/VT100 Device Attributes query while printing the first
 interactive banner. It uses plain serial redraw output until a valid response
 arrives, including a response received after a delayed CLI poll.
