@@ -15,9 +15,9 @@ This fork is maintained by Kirill X-plora Chugreev
 
 ### Maintainer changes
 
-- 2026-07-23: Ignored trailing LF in CRLF terminal input.
-- 2026-07-23: Added configurable interactive messages while retaining the
-  original command parser behavior.
+- 2026-07-23: Added configurable interactive messages, CRLF terminal-input
+  handling, a 10-entry interactive command history, and empty-command handling
+  while retaining the original command parser behavior.
 - 2026-07-22: Added silent-mode output control while retaining the original
   command parser behavior.
 
@@ -87,6 +87,13 @@ cmd.setSilentMode(false);  // Restore the interactive prompt.
 
 Silent mode does not suppress characters echoed while a command is entered, or
 output produced by command handlers themselves.
+
+## Command history
+
+In interactive mode, press the Up and Down arrow keys to recall the last ten
+commands. The command being typed before the first Up arrow is restored when
+Down returns past the newest history entry. History is disabled in silent mode,
+so machine-readable protocol input such as an `auth` password is not retained.
 
 ## Notes
 

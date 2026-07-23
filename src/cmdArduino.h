@@ -1,11 +1,13 @@
 /**
  * @file cmdArduino.h
  * @brief Public API for the cmdArduino command-line parser.
- * @details Declares the FreakLabs command parser and the silent-mode API.
+ * @details Declares the FreakLabs command parser, command history, and the
+ *          silent-mode API.
  * @copyright Copyright (C) 2009 FreakLabs. All rights reserved.
  * @copyright Copyright (c) 2026 Kirill X-plora Chugreev.
  * @license BSD-3-Clause
- * @note Modified 2026-07-23: added initialization-time CLI messages.
+ * @note Modified 2026-07-23: added initialization-time CLI messages and a
+ *       fixed-size interactive command history.
  * @note Modified 2026-07-22: added silent-mode output control.
  *
  * Originally written by Christopher Wang aka Akiba.
@@ -46,6 +48,7 @@
 #endif
 
 #define MAX_MSG_SIZE    60
+#define CMD_HISTORY_DEPTH 10
 #include <stdint.h>
 
 // command line structure
@@ -104,6 +107,10 @@ private:
     const __FlashStringHelper *_prompt;
     const __FlashStringHelper *_unrecognized;
     void display();
+    void addHistory();
+    void historyUp();
+    void historyDown();
+    void replaceLine(const char *line);
     void parse(char *cmd);
     void handler();    
 };

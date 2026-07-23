@@ -5,8 +5,9 @@
  * @copyright Copyright (C) 2009 FreakLabs. All rights reserved.
  * @copyright Copyright (c) 2026 Kirill X-plora Chugreev.
  * @license BSD-3-Clause
- * @note Modified 2026-07-23: ignored trailing LF in CRLF terminal input.
- * @note Modified 2026-07-23: added initialization-time CLI messages.
+ * @note Modified 2026-07-23: added initialization-time CLI messages, CRLF
+ *       input handling, a fixed-size interactive command history, and empty
+ *       command handling.
  * @note Modified 2026-07-22: added silent-mode output control.
  *
  * Originally written by Christopher Wang aka Akiba.
@@ -41,11 +42,21 @@
 // command line message buffer and pointer
 static uint8_t msg[MAX_MSG_SIZE];
 static uint8_t *msg_ptr;
+static char cmd_history[CMD_HISTORY_DEPTH][MAX_MSG_SIZE];
+static uint8_t cmd_history_count;
+static uint8_t cmd_history_next;
+static uint8_t cmd_history_pos;
+static uint8_t cmd_escape_state;
+static char cmd_draft[MAX_MSG_SIZE];
 
 // linked list for command table
 static cmd_t *cmd_tbl_list, *cmd_tbl;
 
 Cmd cmd;
+
+#define CMD_ESCAPE_NONE 0
+#define CMD_ESCAPE_START 1
+#define CMD_ESCAPE_CSI 2
 
 /**************************************************************************/
 /*!
@@ -79,6 +90,88 @@ void Cmd::display()
     _ser->print(_prompt);
 }
 
+void Cmd::addHistory()
+{
+    if (!_promptEnabled || msg[0] == '\0')
+    {
+        return;
+    }
+
+    strcpy(cmd_history[cmd_history_next], (char *)msg);
+    cmd_history_next = (cmd_history_next + 1) % CMD_HISTORY_DEPTH;
+    if (cmd_history_count < CMD_HISTORY_DEPTH)
+    {
+        cmd_history_count++;
+    }
+    cmd_history_pos = cmd_history_count;
+}
+
+void Cmd::replaceLine(const char *line)
+{
+    uint8_t old_length = msg_ptr - msg;
+    uint8_t new_length = strlen(line);
+
+    memcpy(msg, line, new_length);
+    msg[new_length] = '\0';
+    msg_ptr = msg + new_length;
+
+    _ser->print('\r');
+    _ser->print(_prompt);
+    _ser->print((char *)msg);
+    while (new_length < old_length)
+    {
+        _ser->print(' ');
+        new_length++;
+    }
+    _ser->print('\r');
+    _ser->print(_prompt);
+    _ser->print((char *)msg);
+}
+
+void Cmd::historyUp()
+{
+    if (!_promptEnabled || cmd_history_count == 0)
+    {
+        return;
+    }
+
+    if (cmd_history_pos == cmd_history_count)
+    {
+        memcpy(cmd_draft, msg, msg_ptr - msg);
+        cmd_draft[msg_ptr - msg] = '\0';
+        cmd_history_pos--;
+    }
+    else if (cmd_history_pos > 0)
+    {
+        cmd_history_pos--;
+    }
+
+    uint8_t first = (cmd_history_next + CMD_HISTORY_DEPTH -
+                     cmd_history_count) % CMD_HISTORY_DEPTH;
+    uint8_t index = (first + cmd_history_pos) % CMD_HISTORY_DEPTH;
+    replaceLine(cmd_history[index]);
+}
+
+void Cmd::historyDown()
+{
+    if (!_promptEnabled || cmd_history_pos == cmd_history_count)
+    {
+        return;
+    }
+
+    cmd_history_pos++;
+    if (cmd_history_pos == cmd_history_count)
+    {
+        replaceLine(cmd_draft);
+        return;
+    }
+
+    uint8_t first = (cmd_history_next + CMD_HISTORY_DEPTH -
+                     cmd_history_count) % CMD_HISTORY_DEPTH;
+    uint8_t index = (first + cmd_history_pos) % CMD_HISTORY_DEPTH;
+    replaceLine(cmd_history[index]);
+}
+
 /**************************************************************************/
 /*!
     Parse the command line. This function tokenizes the command input, then
@@ -104,6 +197,12 @@ void Cmd::parse(char *cmd)
     
     // save off the number of arguments for the particular command.
     argc = i;
+
+    if (argv[0] == NULL)
+    {
+        display();
+        return;
+    }
 
     // parse the command table for valid command. used argv[0] which is the
     // actual command name typed in at the prompt
@@ -137,6 +236,34 @@ void Cmd::handler()
 {
     char c = _ser->read();
 
+    if (cmd_escape_state == CMD_ESCAPE_START)
+    {
+        cmd_escape_state = c == '[' ? CMD_ESCAPE_CSI : CMD_ESCAPE_NONE;
+        if (cmd_escape_state != CMD_ESCAPE_NONE)
+        {
+            return;
+        }
+    }
+    else if (cmd_escape_state == CMD_ESCAPE_CSI)
+    {
+        cmd_escape_state = CMD_ESCAPE_NONE;
+        if (c == 'A')
+        {
+            historyUp();
+        }
+        else if (c == 'B')
+        {
+            historyDown();
+        }
+        return;
+    }
+
+    if (c == 0x1B)
+    {
+        cmd_escape_state = CMD_ESCAPE_START;
+        return;
+    }
+
     switch (c)
     {
     case '\n':
@@ -146,6 +273,7 @@ void Cmd::handler()
         // terminate the msg and reset the msg ptr. then send
         // it to the handler for processing.
         *msg_ptr = '\0';
+        addHistory();
         _ser->print("\r\n");
         parse((char *)msg);
         msg_ptr = msg;
@@ -153,6 +281,7 @@ void Cmd::handler()
     
     case '\b':
         // backspace 
+        cmd_history_pos = cmd_history_count;
         _ser->print(c);
         if (msg_ptr > msg)
         {
@@ -162,6 +291,7 @@ void Cmd::handler()
     
     default:
         // normal character entered. add it to the buffer
+        cmd_history_pos = cmd_history_count;
         _ser->print(c);
         *msg_ptr++ = c;
 
@@ -205,6 +335,10 @@ void Cmd::begin(uint32_t speed, HardwareSerial *ser,
 
     // init the command table
     cmd_tbl_list = NULL;
+    cmd_history_count = 0;
+    cmd_history_next = 0;
+    cmd_history_pos = 0;
+    cmd_escape_state = CMD_ESCAPE_NONE;
 
     // load in the serial pointer if it's passed in
     if (ser == NULL)
