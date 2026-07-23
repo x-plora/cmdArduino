@@ -101,9 +101,9 @@ so machine-readable protocol input is not retained.
 In interactive mode, use Left and Right to move the cursor, Home and End to
 move to the beginning or end of the command, Backspace to erase the character
 to the left of the cursor, and Delete to erase the character at the cursor.
-The CLI attempts ANSI/VT100 Device Attributes detection while printing the
-first interactive banner. If no reply arrives within 200 ms, it uses plain
-serial redraw output instead.
+The CLI sends an ANSI/VT100 Device Attributes query while printing the first
+interactive banner. It uses plain serial redraw output until a valid response
+arrives, including a response received after a delayed CLI poll.
 
 Use `setAnsiMode(true)` or `setAnsiMode(false)` to select terminal support
 manually. Applications that require predictable plain serial output should call

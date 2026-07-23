@@ -119,7 +119,6 @@ private:
     bool _ansiManual;
     bool _ansiDetecting;
     uint8_t _ansiProbeState;
-    unsigned long _ansiProbeDeadline;
     const __FlashStringHelper *_banner;
     const __FlashStringHelper *_prompt;
     const __FlashStringHelper *_unrecognized;

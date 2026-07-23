@@ -67,7 +67,6 @@ Cmd cmd;
 #define CMD_ANSI_PROBE_ESC 1
 #define CMD_ANSI_PROBE_CSI 2
 #define CMD_ANSI_PROBE_DEVICE_ATTRIBUTES 3
-#define CMD_ANSI_PROBE_TIMEOUT_MS 200UL
 
 /**************************************************************************/
 /*!
@@ -76,8 +75,8 @@ Cmd cmd;
 /**************************************************************************/
 Cmd::Cmd() : _promptEnabled(true), _bannerPending(true), _ansiEnabled(false),
              _ansiManual(false), _ansiDetecting(false),
-             _ansiProbeState(CMD_ANSI_PROBE_NONE), _ansiProbeDeadline(0),
-             _banner(NULL), _prompt(NULL), _unrecognized(NULL)
+             _ansiProbeState(CMD_ANSI_PROBE_NONE), _banner(NULL),
+             _prompt(NULL), _unrecognized(NULL)
 {
 
 }
@@ -115,7 +114,6 @@ void Cmd::startAnsiDetection()
     _ansiEnabled = false;
     _ansiDetecting = true;
     _ansiProbeState = CMD_ANSI_PROBE_NONE;
-    _ansiProbeDeadline = millis() + CMD_ANSI_PROBE_TIMEOUT_MS;
     _ser->print(F("\033[c"));
 }
 
@@ -143,7 +141,6 @@ bool Cmd::consumeAnsiResponse(char c)
             _ansiProbeState = CMD_ANSI_PROBE_CSI;
             return true;
         }
-        _ansiDetecting = false;
         _ansiProbeState = CMD_ANSI_PROBE_NONE;
         return false;
     }
@@ -156,7 +153,6 @@ bool Cmd::consumeAnsiResponse(char c)
             return true;
         }
 
-        _ansiDetecting = false;
         _ansiProbeState = CMD_ANSI_PROBE_NONE;
         if (c == 'A')
         {
@@ -203,7 +199,6 @@ bool Cmd::consumeAnsiResponse(char c)
         return true;
     }
 
-    _ansiDetecting = false;
     _ansiProbeState = CMD_ANSI_PROBE_NONE;
     return false;
 }
@@ -643,13 +638,6 @@ void Cmd::handler()
 /**************************************************************************/
 void Cmd::poll()
 {
-    if (_ansiDetecting &&
-        (long)(millis() - _ansiProbeDeadline) >= 0)
-    {
-        _ansiDetecting = false;
-        _ansiProbeState = CMD_ANSI_PROBE_NONE;
-    }
-
     while (_ser->available())
     {
         handler();
