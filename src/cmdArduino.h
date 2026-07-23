@@ -8,7 +8,7 @@
  * @license BSD-3-Clause
  * @note Modified 2026-07-23: added initialization-time CLI messages, a
  *       fixed-size interactive command history, line editing, and ANSI
- *       terminal control.
+ *       terminal control with color output.
  * @note Modified 2026-07-22: added silent-mode output control.
  *
  * Originally written by Christopher Wang aka Akiba.
@@ -59,6 +59,27 @@ typedef struct _cmd_t
     void (*func)(int argc, char **argv);
     struct _cmd_t *next;
 } cmd_t;
+
+enum CmdTextColor
+{
+    CMD_COLOR_BLACK = 30,
+    CMD_COLOR_RED = 31,
+    CMD_COLOR_GREEN = 32,
+    CMD_COLOR_YELLOW = 33,
+    CMD_COLOR_BLUE = 34,
+    CMD_COLOR_MAGENTA = 35,
+    CMD_COLOR_CYAN = 36,
+    CMD_COLOR_WHITE = 37,
+    CMD_COLOR_DEFAULT = 39,
+    CMD_COLOR_BRIGHT_BLACK = 90,
+    CMD_COLOR_BRIGHT_RED = 91,
+    CMD_COLOR_BRIGHT_GREEN = 92,
+    CMD_COLOR_BRIGHT_YELLOW = 93,
+    CMD_COLOR_BRIGHT_BLUE = 94,
+    CMD_COLOR_BRIGHT_MAGENTA = 95,
+    CMD_COLOR_BRIGHT_CYAN = 96,
+    CMD_COLOR_BRIGHT_WHITE = 97
+};
 
 class Cmd
 {
@@ -111,6 +132,21 @@ public:
      *                    plain serial redraw output.
      */
     void setAnsiMode(bool enabled);
+
+    /**
+     * @brief Selects the foreground color for subsequent terminal output.
+     *
+     * @details Emits an ANSI Select Graphic Rendition sequence only when ANSI
+     *          support has been enabled or detected.
+     *
+     * @param[in] color Foreground color from `CmdTextColor`.
+     */
+    void setTextColor(CmdTextColor color);
+
+    /**
+     * @brief Resets terminal text attributes after colored output.
+     */
+    void resetTextColor();
 
 private:
     bool _promptEnabled; ///< Controls CLI prompt and auxiliary-message output.

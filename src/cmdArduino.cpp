@@ -7,7 +7,8 @@
  * @license BSD-3-Clause
  * @note Modified 2026-07-23: added initialization-time CLI messages, CRLF
  *       input handling, a fixed-size interactive command history, line
- *       editing, ANSI terminal control, and empty command handling.
+ *       editing, ANSI terminal control with color output, and empty command
+ *       handling.
  * @note Modified 2026-07-22: added silent-mode output control.
  *
  * Originally written by Christopher Wang aka Akiba.
@@ -93,6 +94,7 @@ void Cmd::display()
         return;
     }
 
+    resetTextColor();
     _ser->println();
     cmd_rendered_length = 0;
     if (_bannerPending)
@@ -733,6 +735,26 @@ void Cmd::setAnsiMode(bool enabled)
     _ansiManual = true;
     _ansiDetecting = false;
     _ansiProbeState = CMD_ANSI_PROBE_NONE;
+}
+
+void Cmd::setTextColor(CmdTextColor color)
+{
+    if (!_ansiEnabled)
+    {
+        return;
+    }
+
+    _ser->print(F("\033["));
+    _ser->print((uint8_t)color);
+    _ser->print('m');
+}
+
+void Cmd::resetTextColor()
+{
+    if (_ansiEnabled)
+    {
+        _ser->print(F("\033[0m"));
+    }
 }
 
 /**************************************************************************/

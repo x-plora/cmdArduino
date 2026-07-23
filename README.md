@@ -17,8 +17,8 @@ This fork is maintained by Kirill X-plora Chugreev
 
 - 2026-07-23: Added configurable interactive messages, CRLF terminal-input
   handling, a 10-entry interactive command history, line editing, and
-  empty-command handling, plus ANSI terminal control, while retaining the
-  original command parser behavior.
+  empty-command handling, plus ANSI terminal control and color output, while
+  retaining the original command parser behavior.
 - 2026-07-22: Added silent-mode output control while retaining the original
   command parser behavior.
 
@@ -108,6 +108,20 @@ arrives, including a response received after a delayed CLI poll.
 Use `setAnsiMode(true)` or `setAnsiMode(false)` to select terminal support
 manually. Applications that require predictable plain serial output should call
 `setAnsiMode(false)` before the first interactive prompt.
+
+## ANSI color output
+
+Use `setTextColor()` before writing a message and `resetTextColor()` after it:
+
+```cpp
+cmd.setTextColor(CMD_COLOR_GREEN);
+Serial.println(F("OK"));
+cmd.resetTextColor();
+```
+
+The library provides standard and bright foreground colors through
+`CmdTextColor`. Color calls do nothing until ANSI support is enabled or
+detected. The next CLI prompt resets text attributes automatically.
 
 ## Notes
 
