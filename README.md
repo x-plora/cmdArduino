@@ -74,28 +74,36 @@ On AVR boards, wrap custom messages with `F()` so they remain in program memory
 instead of consuming SRAM.
 
 The banner is printed once, immediately before the first interactive prompt. If
-silent mode is enabled first, it remains pending until interactive mode prints
+the prompt is disabled first, it remains pending until interactive mode prints
 that prompt.
 
-## Silent mode
+## Prompt control
 
-Use silent mode when the serial channel is a machine-readable service protocol
+Suppress the interactive prompt when the serial channel is a machine-readable service protocol
 rather than an interactive terminal:
 
 ```cpp
-cmd.setSilentMode(true);   // Suppress banner, prompt, and unknown-command text.
-cmd.setSilentMode(false);  // Restore the interactive prompt.
+cmd.setNoPrompt(true);   // Suppress banner, prompt, and unknown-command text.
+cmd.setNoPrompt(false);  // Restore the interactive prompt.
 ```
 
-Silent mode does not suppress characters echoed while a command is entered, or
-output produced by command handlers themselves.
+Prompt control does not suppress characters echoed while a command is entered,
+or output produced by command handlers themselves. To accept a command without
+reflecting its bytes, for example while receiving a password, disable input echo
+independently:
+
+```cpp
+cmd.setInputEcho(false);
+```
+
+This does not suppress output produced by the selected command handler.
 
 ## Command history
 
 In interactive mode, press the Up and Down arrow keys to recall the last ten
 commands. The command being typed before the first Up arrow is restored when
-Down returns past the newest history entry. History is disabled in silent mode,
-so machine-readable protocol input is not retained.
+Down returns past the newest history entry. History is disabled when the prompt
+is disabled, so machine-readable protocol input is not retained.
 
 ## Line editing
 

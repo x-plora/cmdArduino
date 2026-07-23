@@ -2,14 +2,14 @@
  * @file cmdArduino.h
  * @brief Public API for the cmdArduino command-line parser.
  * @details Declares the FreakLabs command parser, command history, terminal
- *          control, and the silent-mode API.
+ *          control, prompt control, and input-echo control.
  * @copyright Copyright (C) 2009 FreakLabs. All rights reserved.
  * @copyright Copyright (c) 2026 Kirill X-plora Chugreev.
  * @license BSD-3-Clause
  * @note Modified 2026-07-23: added initialization-time CLI messages, a
  *       fixed-size interactive command history, line editing, and ANSI
- *       terminal control with foreground and background color output.
- * @note Modified 2026-07-22: added silent-mode output control.
+ *       terminal control with foreground and background color output,
+ *       separate prompt control, and input-echo control.
  *
  * Originally written by Christopher Wang aka Akiba.
  * Please post support questions to the FreakLabs forum.
@@ -131,17 +131,27 @@ public:
     uint32_t conv(char *str, uint8_t base=10);
 
     /**
-     * @brief Enables or disables CLI silent mode.
+     * @brief Enables or disables the interactive CLI prompt.
      *
      * @details When enabled, the CLI does not print the banner, prompt, or
      *          unknown-command message.
      *
-     * @param[in] enabled `true` for protocol output without interactive
-     *                    messages, `false` for the interactive prompt.
+     * @param[in] enabled `true` to suppress interactive messages, `false`
+     *                    to restore the interactive prompt.
      * @note Modified 2026-07-22: added CLI auxiliary-output control.
      * @copyright Copyright (c) 2026 Kirill X-plora Chugreev.
      */
-    void setSilentMode(bool enabled);
+    void setNoPrompt(bool enabled);
+
+    /**
+     * @brief Enables or disables echo of received command input.
+     *
+     * @details This affects only bytes that the CLI would reflect while a
+     *          command is entered. Command-handler output is unchanged.
+     *
+     * @param[in] enabled true to echo input, false to keep it private.
+     */
+    void setInputEcho(bool enabled);
 
     /**
      * @brief Manually selects ANSI/VT100 terminal support.
@@ -181,6 +191,7 @@ public:
 
 private:
     bool _promptEnabled; ///< Controls CLI prompt and auxiliary-message output.
+    bool _inputEcho; ///< Controls echo of received command input bytes.
     bool _bannerPending; ///< Prints the banner once before the first prompt.
     bool _ansiEnabled;
     bool _ansiManual;

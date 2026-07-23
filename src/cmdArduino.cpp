@@ -1,7 +1,8 @@
 /**
  * @file cmdArduino.cpp
  * @brief Implementation of the cmdArduino command-line parser.
- * @details Implements command parsing, serial output, and silent-mode control.
+ * @details Implements command parsing, serial output, prompt control, and
+ * input-echo control.
  * @copyright Copyright (C) 2009 FreakLabs. All rights reserved.
  * @copyright Copyright (c) 2026 Kirill X-plora Chugreev.
  * @license BSD-3-Clause
@@ -74,7 +75,7 @@ Cmd cmd;
     constructor
 */
 /**************************************************************************/
-Cmd::Cmd() : _promptEnabled(true), _bannerPending(true), _ansiEnabled(false),
+Cmd::Cmd() : _promptEnabled(true), _inputEcho(true), _bannerPending(true), _ansiEnabled(false),
              _ansiManual(false), _ansiDetecting(false),
              _ansiProbeState(CMD_ANSI_PROBE_NONE), _banner(NULL),
              _prompt(NULL), _unrecognized(NULL)
@@ -566,7 +567,10 @@ void Cmd::handler()
         // terminate the current message and send it to the command parser.
         msg[msg_length] = '\0';
         addHistory();
-        _ser->print("\r\n");
+        if (_inputEcho)
+        {
+            _ser->print("\r\n");
+        }
         parse((char *)msg);
         msg_length = 0;
         msg_cursor = 0;
@@ -590,7 +594,10 @@ void Cmd::handler()
         }
         else
         {
-            _ser->print(c);
+            if (_inputEcho)
+            {
+                _ser->print(c);
+            }
             if (msg_length > 0)
             {
                 msg_length--;
@@ -624,7 +631,10 @@ void Cmd::handler()
         }
         else
         {
-            _ser->print(c);
+            if (_inputEcho)
+            {
+                _ser->print(c);
+            }
             msg[msg_length] = c;
             msg_length++;
             msg_cursor = msg_length;
@@ -726,9 +736,14 @@ void Cmd::add(const char *name, void (*func)(int argc, char **argv))
     cmd_tbl_list = cmd_tbl;
 }
 
-void Cmd::setSilentMode(bool enabled)
+void Cmd::setNoPrompt(bool enabled)
 {
     _promptEnabled = !enabled;
+}
+
+void Cmd::setInputEcho(bool enabled)
+{
+    _inputEcho = enabled;
 }
 
 void Cmd::setAnsiMode(bool enabled)

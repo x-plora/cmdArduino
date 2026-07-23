@@ -14,7 +14,8 @@ begin	KEYWORD2
 add		KEYWORD2
 conv	KEYWORD2
 poll	KEYWORD2
-setSilentMode	KEYWORD2
+setNoPrompt	KEYWORD2
+setInputEcho	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
