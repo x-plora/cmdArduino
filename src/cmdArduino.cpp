@@ -5,6 +5,8 @@
  * @copyright Copyright (C) 2009 FreakLabs. All rights reserved.
  * @copyright Copyright (c) 2026 Kirill X-plora Chugreev.
  * @license BSD-3-Clause
+ * @note Modified 2026-07-23: ignored trailing LF in CRLF terminal input.
+ * @note Modified 2026-07-23: added initialization-time CLI messages.
  * @note Modified 2026-07-22: added silent-mode output control.
  *
  * Originally written by Christopher Wang aka Akiba.
@@ -43,11 +45,6 @@ static uint8_t *msg_ptr;
 // linked list for command table
 static cmd_t *cmd_tbl_list, *cmd_tbl;
 
-// text strings for command prompt (stored in flash)
-const char cmd_banner[] PROGMEM = "*************** CMD *******************";
-const char cmd_prompt[] PROGMEM = "CMD >> ";
-const char cmd_unrecog[] PROGMEM = "CMD: Command not recognized.";
-
 Cmd cmd;
 
 /**************************************************************************/
@@ -55,7 +52,8 @@ Cmd cmd;
     constructor
 */
 /**************************************************************************/
-Cmd::Cmd() : _promptEnabled(true)
+Cmd::Cmd() : _promptEnabled(true), _bannerPending(true), _banner(NULL),
+             _prompt(NULL), _unrecognized(NULL)
 {
 
 }
@@ -72,15 +70,13 @@ void Cmd::display()
         return;
     }
 
-    char buf[50];
-
     _ser->println();
-
-    strcpy_P(buf, cmd_banner);
-    _ser->println(buf);
-
-    strcpy_P(buf, cmd_prompt);
-    _ser->print(buf);
+    if (_bannerPending)
+    {
+        _ser->println(_banner);
+        _bannerPending = false;
+    }
+    _ser->print(_prompt);
 }
 
 /**************************************************************************/
@@ -94,7 +90,6 @@ void Cmd::parse(char *cmd)
 {
     uint8_t argc, i = 0;
     char *argv[30];
-    char buf[50];
     cmd_t *cmd_entry;
 
     fflush(stdout);
@@ -125,8 +120,7 @@ void Cmd::parse(char *cmd)
     // command not recognized. print message and re-generate prompt.
     if (_promptEnabled)
     {
-        strcpy_P(buf, cmd_unrecog);
-        _ser->println(buf);
+        _ser->println(_unrecognized);
     }
 
     display();
@@ -145,6 +139,9 @@ void Cmd::handler()
 
     switch (c)
     {
+    case '\n':
+        break;
+
     case '\r':
         // terminate the msg and reset the msg ptr. then send
         // it to the handler for processing.
@@ -198,7 +195,10 @@ void Cmd::poll()
     and initializes things. 
 */
 /**************************************************************************/
-void Cmd::begin(uint32_t speed, HardwareSerial *ser)
+void Cmd::begin(uint32_t speed, HardwareSerial *ser,
+                const __FlashStringHelper *banner,
+                const __FlashStringHelper *prompt,
+                const __FlashStringHelper *unrecognized)
 {
     // init the msg ptr
     msg_ptr = msg;
@@ -216,8 +216,14 @@ void Cmd::begin(uint32_t speed, HardwareSerial *ser)
         _ser = ser;
     }
 
+    _banner = banner ? banner : F("*************** CMD *******************");
+    _prompt = prompt ? prompt : F("CMD >> ");
+    _unrecognized = unrecognized ? unrecognized :
+        F("CMD: Command not recognized.");
+    _bannerPending = true;
+
     // set the serial speed
-    ser->begin(speed);
+    _ser->begin(speed);
 }
 
 /**************************************************************************/

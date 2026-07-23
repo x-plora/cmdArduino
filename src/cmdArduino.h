@@ -5,6 +5,7 @@
  * @copyright Copyright (C) 2009 FreakLabs. All rights reserved.
  * @copyright Copyright (c) 2026 Kirill X-plora Chugreev.
  * @license BSD-3-Clause
+ * @note Modified 2026-07-23: added initialization-time CLI messages.
  * @note Modified 2026-07-22: added silent-mode output control.
  *
  * Originally written by Christopher Wang aka Akiba.
@@ -61,7 +62,24 @@ public:
     HardwareSerial *_ser;
 
     Cmd();
-    void begin(uint32_t speed, HardwareSerial *ser = NULL);
+    /**
+     * @brief Initializes the command-line interface.
+     *
+     * @param[in] speed UART speed in baud.
+     * @param[in] ser Serial port to use; `NULL` selects `Serial`.
+     * @param[in] banner Optional banner stored in program memory, for example
+     *                   `F("My CLI")`; `NULL` uses the default banner.
+     * @param[in] prompt Optional prompt stored in program memory, for example
+     *                   `F("my-cli> ")`; `NULL` uses the default prompt.
+     * @param[in] unrecognized Optional unknown-command message stored in program
+     *                          memory; `NULL` uses the default message.
+     * @note The three message parameters must be passed with `F()` so they are
+     *       retained in program memory on AVR targets.
+     */
+    void begin(uint32_t speed, HardwareSerial *ser = NULL,
+               const __FlashStringHelper *banner = NULL,
+               const __FlashStringHelper *prompt = NULL,
+               const __FlashStringHelper *unrecognized = NULL);
     void poll();
     void add(const char *name, void (*func)(int argc, char **argv));
     uint32_t conv(char *str, uint8_t base=10);
@@ -81,6 +99,10 @@ public:
 
 private:
     bool _promptEnabled; ///< Controls CLI prompt and auxiliary-message output.
+    bool _bannerPending; ///< Prints the banner once before the first prompt.
+    const __FlashStringHelper *_banner;
+    const __FlashStringHelper *_prompt;
+    const __FlashStringHelper *_unrecognized;
     void display();
     void parse(char *cmd);
     void handler();    

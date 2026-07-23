@@ -11,8 +11,15 @@ by FreakLabs. The original BSD 3-Clause license notice and attribution are
 preserved in the source files.
 
 This fork is maintained by Kirill X-plora Chugreev
-(`<the.xplora@gmail.com>`). It adds silent-mode output control while retaining
-the original command parser behavior.
+(`<the.xplora@gmail.com>`).
+
+### Maintainer changes
+
+- 2026-07-23: Ignored trailing LF in CRLF terminal input.
+- 2026-07-23: Added configurable interactive messages while retaining the
+  original command parser behavior.
+- 2026-07-22: Added silent-mode output control while retaining the original
+  command parser behavior.
 
 ## Layout
 
@@ -23,7 +30,8 @@ Arduino and PlatformIO library layout. Examples remain in `examples/`.
 
 - Arduino-compatible AVR or megaAVR board.
 - A `HardwareSerial` interface for the command connection.
-- Input terminated with a carriage return (`\r`).
+- Input terminated with a carriage return (`\r`); a trailing line feed from a
+  CRLF terminal is ignored.
 
 ## Basic usage
 
@@ -46,6 +54,26 @@ void loop() {
 
 The command callback receives the command name in `argv[0]`; subsequent tokens
 are available as arguments. `argc` includes the command name.
+
+## Custom interactive messages
+
+Pass optional Flash-resident messages to `begin()` to change the banner,
+prompt, and unknown-command response. Omit any message (or pass `NULL`) to
+keep its default value:
+
+```cpp
+cmd.begin(115200, &Serial,
+          F("My controller CLI"),
+          F("controller> "),
+          F("Unknown command"));
+```
+
+On AVR boards, wrap custom messages with `F()` so they remain in program memory
+instead of consuming SRAM.
+
+The banner is printed once, immediately before the first interactive prompt. If
+silent mode is enabled first, it remains pending until interactive mode prints
+that prompt.
 
 ## Silent mode
 
