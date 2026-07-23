@@ -17,8 +17,9 @@ This fork is maintained by Kirill X-plora Chugreev
 
 - 2026-07-23: Added configurable interactive messages, CRLF terminal-input
   handling, a 10-entry interactive command history, line editing, and
-  empty-command handling, plus ANSI terminal control and color output, while
-  retaining the original command parser behavior.
+  empty-command handling, plus ANSI terminal control with foreground and
+  background color output and colored unknown-command errors, while retaining
+  the original command parser behavior.
 - 2026-07-22: Added silent-mode output control while retaining the original
   command parser behavior.
 
@@ -111,17 +112,21 @@ manually. Applications that require predictable plain serial output should call
 
 ## ANSI color output
 
-Use `setTextColor()` before writing a message and `resetTextColor()` after it:
+Use `setTextColor()` and `setBackgroundColor()` before writing a message, then
+`resetTextColor()` after it:
 
 ```cpp
 cmd.setTextColor(CMD_COLOR_GREEN);
+cmd.setBackgroundColor(CMD_BACKGROUND_BLACK);
 Serial.println(F("OK"));
 cmd.resetTextColor();
 ```
 
 The library provides standard and bright foreground colors through
-`CmdTextColor`. Color calls do nothing until ANSI support is enabled or
-detected. The next CLI prompt resets text attributes automatically.
+`CmdTextColor`, and background colors through `CmdBackgroundColor`. Color calls
+do nothing until ANSI support is enabled or detected. Unknown-command errors
+are red automatically. The next CLI prompt resets text attributes
+automatically.
 
 ## Notes
 

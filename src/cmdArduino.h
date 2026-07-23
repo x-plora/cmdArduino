@@ -8,7 +8,7 @@
  * @license BSD-3-Clause
  * @note Modified 2026-07-23: added initialization-time CLI messages, a
  *       fixed-size interactive command history, line editing, and ANSI
- *       terminal control with color output.
+ *       terminal control with foreground and background color output.
  * @note Modified 2026-07-22: added silent-mode output control.
  *
  * Originally written by Christopher Wang aka Akiba.
@@ -81,6 +81,27 @@ enum CmdTextColor
     CMD_COLOR_BRIGHT_WHITE = 97
 };
 
+enum CmdBackgroundColor
+{
+    CMD_BACKGROUND_BLACK = 40,
+    CMD_BACKGROUND_RED = 41,
+    CMD_BACKGROUND_GREEN = 42,
+    CMD_BACKGROUND_YELLOW = 43,
+    CMD_BACKGROUND_BLUE = 44,
+    CMD_BACKGROUND_MAGENTA = 45,
+    CMD_BACKGROUND_CYAN = 46,
+    CMD_BACKGROUND_WHITE = 47,
+    CMD_BACKGROUND_DEFAULT = 49,
+    CMD_BACKGROUND_BRIGHT_BLACK = 100,
+    CMD_BACKGROUND_BRIGHT_RED = 101,
+    CMD_BACKGROUND_BRIGHT_GREEN = 102,
+    CMD_BACKGROUND_BRIGHT_YELLOW = 103,
+    CMD_BACKGROUND_BRIGHT_BLUE = 104,
+    CMD_BACKGROUND_BRIGHT_MAGENTA = 105,
+    CMD_BACKGROUND_BRIGHT_CYAN = 106,
+    CMD_BACKGROUND_BRIGHT_WHITE = 107
+};
+
 class Cmd
 {
 public:
@@ -142,6 +163,16 @@ public:
      * @param[in] color Foreground color from `CmdTextColor`.
      */
     void setTextColor(CmdTextColor color);
+
+    /**
+     * @brief Selects the background color for subsequent terminal output.
+     *
+     * @details Emits an ANSI Select Graphic Rendition sequence only when ANSI
+     *          support has been enabled or detected.
+     *
+     * @param[in] color Background color from `CmdBackgroundColor`.
+     */
+    void setBackgroundColor(CmdBackgroundColor color);
 
     /**
      * @brief Resets terminal text attributes after colored output.
