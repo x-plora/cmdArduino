@@ -53,6 +53,7 @@ static uint8_t cmd_escape_state;
 static uint8_t cmd_escape_param;
 static uint8_t cmd_rendered_length;
 static char cmd_draft[MAX_MSG_SIZE];
+static const char cmd_ansi_csi[] PROGMEM = "\033[";
 
 // linked list for command table
 static cmd_t *cmd_tbl_list, *cmd_tbl;
@@ -276,7 +277,7 @@ void Cmd::redrawLine()
         uint8_t tail_length = msg_length - msg_cursor;
         if (tail_length > 0)
         {
-            _ser->print(F("\033["));
+            _ser->print(reinterpret_cast<const __FlashStringHelper *>(cmd_ansi_csi));
             _ser->print(tail_length);
             _ser->print('D');
         }
@@ -438,8 +439,9 @@ void Cmd::parse(char *cmd)
         return;
     }
 
-    if (argc == 3 && !strcmp(argv[0], "__cmd") &&
-        !strcmp(argv[1], "ansi") && !strcmp(argv[2], "off"))
+    if (argc == 3 && !strcmp_P(argv[0], PSTR("__cmd")) &&
+        !strcmp_P(argv[1], PSTR("ansi")) &&
+        !strcmp_P(argv[2], PSTR("off")))
     {
         setAnsiMode(false);
         display();
@@ -594,7 +596,7 @@ void Cmd::handler()
         addHistory();
         if (_inputEcho)
         {
-            _ser->print("\r\n");
+            _ser->print(F("\r\n"));
         }
         parse((char *)msg);
         msg_length = 0;
@@ -638,7 +640,7 @@ void Cmd::handler()
         // normal character entered. add it to the buffer
         if (msg_length >= MAX_MSG_SIZE - 1)
         {
-            _ser->println("Command too long. Pleaes reduce command size.");
+            _ser->println(F("Command too long. Pleaes reduce command size."));
             msg_length = 0;
             msg_cursor = 0;
             msg[0] = '\0';
@@ -789,7 +791,7 @@ void Cmd::setTextColor(CmdTextColor color)
         return;
     }
 
-    _ser->print(F("\033["));
+    _ser->print(reinterpret_cast<const __FlashStringHelper *>(cmd_ansi_csi));
     _ser->print((uint8_t)color);
     _ser->print('m');
 }
@@ -801,7 +803,7 @@ void Cmd::setBackgroundColor(CmdBackgroundColor color)
         return;
     }
 
-    _ser->print(F("\033["));
+    _ser->print(reinterpret_cast<const __FlashStringHelper *>(cmd_ansi_csi));
     _ser->print((uint8_t)color);
     _ser->print('m');
 }
