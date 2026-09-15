@@ -262,7 +262,7 @@ void Cmd::replaceLine(const char *line)
 
 void Cmd::redrawLine()
 {
-    if (!_promptEnabled)
+    if (!_promptEnabled || !_inputEcho)
     {
         return;
     }

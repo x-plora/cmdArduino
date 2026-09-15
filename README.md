@@ -144,3 +144,6 @@ automatically.
   `malloc()` during setup. Avoid adding commands repeatedly at runtime.
 - The maximum input buffer size is controlled by `MAX_MSG_SIZE` (60 bytes,
   including the terminating null byte).
+
+Input echo control also suppresses interactive line redraws (typing, cursor movement,
+and history). The prompt remains independently controlled by setNoPrompt().
