@@ -49,15 +49,16 @@
 #endif
 
 #define MAX_MSG_SIZE    60
-#define CMD_HISTORY_DEPTH 10
+#define CMD_HISTORY_DEPTH 2
+#define CMD_MAX_COMMANDS 12
 #include <stdint.h>
 
 // command line structure
 typedef struct _cmd_t
 {
-    char *cmd;
+    const void *cmd;
     void (*func)(int argc, char **argv);
-    struct _cmd_t *next;
+    bool progmem;
 } cmd_t;
 
 enum CmdTextColor
@@ -127,7 +128,10 @@ public:
                const __FlashStringHelper *prompt = NULL,
                const __FlashStringHelper *unrecognized = NULL);
     void poll();
+    /** Registers a command name whose storage remains valid for the CLI lifetime. */
     void add(const char *name, void (*func)(int argc, char **argv));
+    /** Registers a command name stored in program memory with F(). */
+    void add(const __FlashStringHelper *name, void (*func)(int argc, char **argv));
     uint32_t conv(char *str, uint8_t base=10);
 
     /**

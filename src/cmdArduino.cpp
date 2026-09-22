@@ -55,8 +55,9 @@ static uint8_t cmd_rendered_length;
 static char cmd_draft[MAX_MSG_SIZE];
 static const char cmd_ansi_csi[] PROGMEM = "\033[";
 
-// linked list for command table
-static cmd_t *cmd_tbl_list, *cmd_tbl;
+// Fixed command table: registration is startup-only and never allocates heap.
+static cmd_t cmd_table[CMD_MAX_COMMANDS];
+static uint8_t cmd_table_count;
 
 Cmd cmd;
 
@@ -450,9 +451,13 @@ void Cmd::parse(char *cmd)
 
     // parse the command table for valid command. used argv[0] which is the
     // actual command name typed in at the prompt
-    for (cmd_entry = cmd_tbl; cmd_entry != NULL; cmd_entry = cmd_entry->next)
+    for (uint8_t index = cmd_table_count; index > 0; --index)
     {
-        if (!strcmp(argv[0], cmd_entry->cmd))
+        cmd_entry = &cmd_table[index - 1U];
+        const bool matches = cmd_entry->progmem
+            ? strcmp_P(argv[0], reinterpret_cast<PGM_P>(cmd_entry->cmd)) == 0
+            : strcmp(argv[0], static_cast<const char *>(cmd_entry->cmd)) == 0;
+        if (matches)
         {
             cmd_entry->func(argc, argv);
             display();
@@ -705,7 +710,7 @@ void Cmd::begin(uint32_t speed, HardwareSerial *ser,
     msg[0] = '\0';
 
     // init the command table
-    cmd_tbl_list = NULL;
+    cmd_table_count = 0;
     cmd_history_count = 0;
     cmd_history_next = 0;
     cmd_history_pos = 0;
@@ -747,23 +752,26 @@ void Cmd::begin(uint32_t speed, HardwareSerial *ser,
 /**************************************************************************/
 void Cmd::add(const char *name, void (*func)(int argc, char **argv))
 {
-    // alloc memory for command struct
-    cmd_tbl = (cmd_t *)malloc(sizeof(cmd_t));
+    if (name == NULL || func == NULL || cmd_table_count >= CMD_MAX_COMMANDS)
+    {
+        return;
+    }
+    cmd_t &entry = cmd_table[cmd_table_count++];
+    entry.cmd = name;
+    entry.func = func;
+    entry.progmem = false;
+}
 
-    // alloc memory for command name
-    char *cmd_name = (char *)malloc(strlen(name)+1);
-
-    // copy command name
-    strcpy(cmd_name, name);
-
-    // terminate the command name
-    cmd_name[strlen(name)] = '\0';
-
-    // fill out structure
-    cmd_tbl->cmd = cmd_name;
-    cmd_tbl->func = func;
-    cmd_tbl->next = cmd_tbl_list;
-    cmd_tbl_list = cmd_tbl;
+void Cmd::add(const __FlashStringHelper *name, void (*func)(int argc, char **argv))
+{
+    if (name == NULL || func == NULL || cmd_table_count >= CMD_MAX_COMMANDS)
+    {
+        return;
+    }
+    cmd_t &entry = cmd_table[cmd_table_count++];
+    entry.cmd = name;
+    entry.func = func;
+    entry.progmem = true;
 }
 
 void Cmd::setNoPrompt(bool enabled)

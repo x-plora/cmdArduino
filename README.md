@@ -15,8 +15,10 @@ This fork is maintained by Kirill X-plora Chugreev
 
 ### Maintainer changes
 
+- 2026-09-22: Replaced heap-allocated command registration with a bounded
+  12-entry static table and reduced interactive history to two entries.
 - 2026-07-23: Added configurable interactive messages, CRLF terminal-input
-  handling, a 10-entry interactive command history, line editing, and
+  handling, interactive command history, line editing, and
   empty-command handling, plus ANSI terminal control with foreground and
   background color output and colored unknown-command errors, while retaining
   the original command parser behavior.
@@ -100,7 +102,7 @@ This does not suppress output produced by the selected command handler.
 
 ## Command history
 
-In interactive mode, press the Up and Down arrow keys to recall the last ten
+In interactive mode, press the Up and Down arrow keys to recall the last two
 commands. The command being typed before the first Up arrow is restored when
 Down returns past the newest history entry. History is disabled when the prompt
 is disabled, so machine-readable protocol input is not retained.
@@ -140,8 +142,9 @@ automatically.
 
 ## Notes
 
-- Registered command names and command-table entries are allocated with
-  `malloc()` during setup. Avoid adding commands repeatedly at runtime.
+- The command table has 12 static entries and performs no heap allocation.
+  Command names passed as `const char *` must remain valid for the lifetime of
+  the CLI. On AVR, prefer `F("name")` to retain command names in program memory.
 - The maximum input buffer size is controlled by `MAX_MSG_SIZE` (60 bytes,
   including the terminating null byte).
 
