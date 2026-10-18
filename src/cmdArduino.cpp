@@ -426,10 +426,20 @@ void Cmd::parse(char *cmd)
     // parse the command line statement and break it up into space-delimited
     // strings. the array of strings will be saved in the argv array.
     argv[i] = strtok(cmd, " ");
-    do
+    while (argv[i] != NULL)
     {
+        // Последний элемент зарезервирован для завершающего NULL.
+        if (i >= sizeof(argv) / sizeof(argv[0]) - 1U)
+        {
+            if (_promptEnabled)
+            {
+                _ser->println(F("Command too long. Pleaes reduce command size."));
+            }
+            display();
+            return;
+        }
         argv[++i] = strtok(NULL, " ");
-    } while ((i < 30) && (argv[i] != NULL));
+    }
     
     // save off the number of arguments for the particular command.
     argc = i;
